@@ -1,0 +1,11 @@
+# Binaries built locally
+/bin/
+glassclipd
+
+# macOS noise
+.DS_Store
+
+# Xcode / Swift build artifacts
+ui/GlassClip/.build/
+ui/GlassClip/*.xcodeproj/xcuserdata/
+DerivedData/

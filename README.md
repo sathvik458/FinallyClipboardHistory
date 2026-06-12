@@ -1,102 +1,75 @@
 # GlassClip
 
-A clipboard history manager for macOS, inspired by Windows 11's Win+V —
-rebuilt with Apple-style glassmorphism. Press **⌘⇧V**, see your last 10
-copies in a frosted floating panel, pick one, and it pastes.
+**Clipboard history for macOS, the way it should look.**
 
-Built as a learning project: **Go** for all the logic, **SwiftUI/AppKit**
-for the native UI.
+Press **⌘⇧V** and a frosted glass panel floats up with your last 10
+copies — text, links, rich text. Arrow down, hit Enter, and it pastes.
+Windows 11's Win+V, rebuilt with real macOS materials.
 
-## Why Go + SwiftUI (and not Wails)?
+> Status: 🚧 under active development. The Go daemon works; the SwiftUI
+> panel is landing next.
 
-| Priority | Winner | Why |
-|---|---|---|
-| Native macOS look | SwiftUI | Real `NSVisualEffectView` blur, vibrancy materials, `NSPanel`. Wails renders HTML in a WebView — CSS blur is fake and never matches Control Center. |
-| Simplicity | Go + thin Swift | Go owns *all* decisions (what to store, dedupe, persistence). Swift only draws pixels and forwards keystrokes. Each side stays small. |
-| Performance | Both | Go daemon idles at ~0% CPU; native panel animates at 120 Hz. |
+## Features
 
-The two halves talk over a **Unix domain socket** with line-delimited JSON.
-Think of it as a tiny local web API you can poke with `nc -U`.
+- 📋 Remembers your last **10** clipboard items automatically
+- 🔍 Smart previews — URLs, multi-line text trimmed to 3 lines
+- 🪟 Native glassmorphism: `NSVisualEffectView`, vibrancy, soft shadows — no fake CSS blur
+- ⌨️ Spotlight-style keyboard navigation: ↑ ↓ Enter Esc
+- 🔁 Duplicate copies move to the top instead of cluttering the list
+- 🔒 100% on-device. No network, no analytics, history stored under your user account only
 
-## Architecture & data flow
+## How it works
 
-```
- You press ⌘C                              You press ⌘⇧V
-      │                                         │
-      ▼                                         ▼
- macOS Pasteboard ◄─────── paste ─────── SwiftUI popup (NSPanel + blur)
-      │  changeCount polling                    │ {"cmd":"history"}
-      ▼                                         │ {"cmd":"select","id":…}
- ┌─ Go daemon (glassclipd) ─────────────────────▼─────────┐
- │  internal/clipboard  ──► internal/history ◄── internal/server │
- │   (monitor goroutine)     (mutex-guarded,      (unix socket,  │
- │                            max 10, deduped)     JSON API)     │
- │                              │                                │
- │                              ▼ internal/storage (Phase 5)     │
- │            ~/Library/Application Support/GlassClip/history.json
- └───────────────────────────────────────────────────────────────┘
-```
-
-Two goroutines run concurrently in the daemon: the **monitor** (writes new
-items) and the **server** (reads items for the UI). `history.History`
-guards its slice with a `sync.Mutex` so they never race.
-
-## Folder structure
+GlassClip is two small programs:
 
 ```
-glassclip/
-├── cmd/glassclipd/      main() for the Go daemon — Go convention: one
-│                        folder per binary under cmd/
-├── internal/            private packages; the Go compiler forbids other
-│   │                    modules from importing anything under internal/
-│   ├── history/         data model + last-10 ring (pure logic, no macOS)
-│   ├── clipboard/       pasteboard watcher (Phase 2)
-│   ├── server/          unix-socket JSON API (Phase 2)
-│   └── storage/         JSON persistence (Phase 5)
-└── ui/GlassClip/        SwiftUI app: panel, hotkey, paste (Phases 3–4)
+┌─────────────────────┐  unix socket   ┌──────────────────────┐
+│ glassclipd (Go)     │◄──────────────►│ GlassClip.app (Swift) │
+│ watches clipboard,  │  JSON lines    │ glass panel, hotkey,  │
+│ keeps last 10 items │                │ paste keystroke       │
+└─────────────────────┘                └──────────────────────┘
 ```
 
-No `pkg/` folder: that's for code other projects import. We have none, so
-idiomatic modern Go skips it.
+The Go daemon owns all the logic; the Swift app only draws pixels and
+sends keystrokes. Full details in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## Data model
+## Quick start (current state)
 
-**`ClipboardItem`** — ID (unique handle so the UI can request a paste
-without resending content), Type (`text`/`url`/`rich`, with `image`
-reserved), Content (full text, what gets pasted), Preview (pre-trimmed
-3-line/120-char string computed in Go so Swift stays dumb), Timestamp.
-
-**`History`** — maxItems (10), items (newest first), and a mutex. Adding a
-duplicate moves the existing entry to the front instead of storing twice;
-item #11 evicts the oldest.
-
-## Implementation plan
-
-- [x] **Phase 1** — module, data model, history ring, unit tests
-- [ ] **Phase 2** — clipboard monitor + unix-socket server (Go daemon complete)
-- [ ] **Phase 3** — SwiftUI glassmorphism popup with keyboard navigation
-- [ ] **Phase 4** — global ⌘⇧V hotkey, paste injection, daemon lifecycle
-- [ ] **Phase 5** — JSON persistence, packaging, docs polish
-
-## Building & testing (so far)
+Requires macOS and Go 1.24+ (`brew install go`).
 
 ```sh
-go test -race ./...   # run unit tests with the race detector
-go vet ./...          # static checks
+git clone https://github.com/sathvik458/FinallyClipboardHistory.git
+cd FinallyClipboardHistory
+go run ./cmd/glassclipd
 ```
 
-Full app build instructions arrive with Phase 5.
+Now copy some text anywhere, then in another terminal:
 
-## macOS permissions (needed from Phase 4)
+```sh
+echo '{"cmd":"history"}' | nc -U ~/Library/"Application Support"/GlassClip/glassclipd.sock
+```
 
-- **Accessibility** (System Settings → Privacy & Security): required to
-  send the synthetic ⌘V keystroke that performs the paste.
-- No other permissions: clipboard reading needs none, and everything stays
-  on-device.
+You'll get your clipboard history back as JSON. The GUI arrives in Phase 3.
 
-## Future features the architecture leaves room for
+## Development
 
-Search, pinned favorites, images/OCR, iCloud sync, tagging, AI
-categorization, quick actions, analytics. They all hang off the same two
-seams: new `ItemType`s in `internal/history`, and new commands in the
-socket protocol (`internal/server`).
+```sh
+go test -race ./...   # unit tests + race detector
+go vet ./...          # static analysis
+```
+
+Want to help? See [CONTRIBUTING.md](CONTRIBUTING.md) — the codebase is
+deliberately small and heavily commented.
+
+## Roadmap
+
+- [x] History engine (10 items, dedupe, previews)
+- [x] Clipboard monitor + unix-socket API
+- [ ] SwiftUI glass panel with keyboard navigation
+- [ ] Global ⌘⇧V hotkey + paste injection
+- [ ] Persistence across restarts
+- [ ] Later: search, pinned items, images & OCR, iCloud sync
+
+## License
+
+GPL-3.0 — see [LICENSE](LICENSE).

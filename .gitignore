@@ -9,3 +9,6 @@ glassclipd
 ui/GlassClip/.build/
 ui/GlassClip/*.xcodeproj/xcuserdata/
 DerivedData/
+
+# Private notes — never commit
+INTERVIEW_PREP.md

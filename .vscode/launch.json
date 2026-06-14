@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:mac Clipboard }/ui/GlassClip",
+            "name": "Debug GlassClip (ui/GlassClip)",
+            "target": "GlassClip",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug GlassClip (ui/GlassClip)"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:mac Clipboard }/ui/GlassClip",
+            "name": "Release GlassClip (ui/GlassClip)",
+            "target": "GlassClip",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release GlassClip (ui/GlassClip)"
+        }
+    ]
+}
